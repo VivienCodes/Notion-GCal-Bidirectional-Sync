@@ -1,5 +1,6 @@
 import os
 from notion_client import Client
+from datetime import datetime # Access the datetime class for the strptime method
 
 # Retrieve the token from an environment variable
 notion_token = os.getenv("NOTION_TOKEN")
