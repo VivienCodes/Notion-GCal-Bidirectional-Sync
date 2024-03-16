@@ -1,36 +1,52 @@
 import os
 from notion_client import Client
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from datetime import datetime, timedelta
 
-# Retrieve the token from an environment variable
+# Notion Setup
 notion_token = os.getenv("NOTION_TOKEN")
-if notion_token is None:
-    print("No token found. Please set the NOTION_TOKEN environment variable.")
-else:
-    print("Token found. Proceeding with initialization.")
-
-# Initialize the Notion client with the token
 notion = Client(auth=notion_token)
-
 database_id = "2a8d1ec36f0e4608bf12eead3db39650"
+
+# Google Calendar Setup
+SCOPES = ['https://www.googleapis.com/auth/calendar']
+flow = InstalledAppFlow.from_client_secrets_file(
+    'credentials.json', SCOPES)
+creds = flow.run_local_server(port=0)
+service = build('calendar', 'v3', credentials=creds)
+
+# Function to create an event in Google Calendar
+def create_event(service, summary, start_datetime):
+    event_start_datetime = datetime.strptime(start_datetime, "%Y-%m-%d").isoformat() + "+10:00"  # Assuming the event starts at 00:00 Sydney time
+    event_end_datetime = (datetime.strptime(start_datetime, "%Y-%m-%d") + timedelta(days=1)).isoformat() + "+10:00"  # Next day, same time for end
+    
+    event = {
+        'summary': summary,
+        'start': {
+            'dateTime': event_start_datetime,
+            'timeZone': 'Australia/Sydney',
+        },
+        'end': {
+            'dateTime': event_end_datetime,
+            'timeZone': 'Australia/Sydney',
+        },
+    }
+    created_event = service.events().insert(calendarId='primary', body=event).execute()
+    print(f"Created event {created_event['summary']} on {created_event['start']['dateTime']}")
 
 try:
     # Fetch pages from the Notion database
     response = notion.databases.query(database_id=database_id)
     pages = response["results"]
 
-    # Print the name of each page (event) found in the database
     for page in pages:
-        # Check if the "Name" property and its title list are not empty
         if page["properties"].get("Name") and page["properties"]["Name"]["title"]:
             page_name = page["properties"]["Name"]["title"][0]["text"]["content"]
-            print(f"Page Name: {page_name}")
-        else:
-            print("A page was found without a Name property or title.")
-
-
-    # If pages are printed successfully, your authentication and query worked!
-    print("Notion API authentication and database query successful!")
+            if page["properties"].get("Date") and page["properties"]["Date"]["date"]:
+                page_date = page["properties"]["Date"]["date"]["start"]
+                # Call the function to create an event in Google Calendar for each Notion page
+                create_event(service, page_name, page_date)
 
 except Exception as e:
-    # If an error occurs, print it out.
     print(f"An error occurred: {e}")
